@@ -614,7 +614,8 @@ function setProvider(p){
 }
 
 function onApiKeyInput() {
-  apiKey = $('apiKeyInput').value.trim();
+  apiKey = $('apiKeyInput').value.trim().replace(/\s+/g,'');
+  $('apiKeyInput').value = apiKey;
   localStorage.setItem('td_apiKey', apiKey);
   if (!apiKey) setApiStatus('', 'Enter your key to enable AI agents');
   else if (!apiKey.startsWith('sk-ant-')) setApiStatus('err', 'Invalid — should start with sk-ant-...');
@@ -658,10 +659,16 @@ function hasValidKey() {
 //  AI CALL HELPERS (Claude + Gemini)
 // ════════════════════════════════════════════════
 async function callClaude(prompt, maxTokens=700){
+  const key = apiKey.trim().replace(/\s+/g,'');
   const res = await fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
-    headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-    body: JSON.stringify({model:'claude-sonnet-4-5', max_tokens:maxTokens, messages:[{role:'user',content:prompt}]})
+    headers:{
+      'Content-Type':'application/json',
+      'x-api-key': key,
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-direct-browser-access':'true'
+    },
+    body: JSON.stringify({model:'claude-haiku-4-5', max_tokens:maxTokens, messages:[{role:'user',content:prompt}]})
   });
   const data = await res.json();
   if(data.error) throw new Error(`Claude API: ${data.error.message}`);
@@ -669,7 +676,7 @@ async function callClaude(prompt, maxTokens=700){
 }
 
 async function callGemini(prompt, maxTokens=700){
-  const model = 'gemini-2.5-flash';
+  const model = 'gemini-2.5-flash-lite';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
   const res = await fetch(url,{
     method:'POST',
