@@ -137,9 +137,9 @@ canvas{position:fixed;top:0;left:0;display:block;}
 #topicSwitchBanner.show{transform:translate(-50%,-50%) scale(1);opacity:1;}
 
 /* MOBILE */
-#mobileInput{position:fixed;opacity:0;pointer-events:none;width:1px;height:1px;top:50%;left:50%;border:none;outline:none;background:transparent;color:transparent;font-size:16px;z-index:-1;}
-#tapToType{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);z-index:5;font-size:10px;letter-spacing:3px;color:var(--dim);pointer-events:all;cursor:pointer;padding:8px 20px;border:1px solid var(--dim);display:none;font-family:'Share Tech Mono',monospace;background:rgba(2,8,16,.8);}
-@media(hover:none)and(pointer:coarse){#tapToType{display:block;}}
+#mobileInput{position:fixed;opacity:0;pointer-events:none;width:1px;height:1px;top:0;left:0;border:none;outline:none;background:transparent;color:transparent;font-size:16px;z-index:-1;}
+#tapToType{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);z-index:6;font-size:10px;letter-spacing:3px;color:var(--dim);pointer-events:all;cursor:pointer;padding:10px 24px;border:1px solid var(--dim);font-family:'Share Tech Mono',monospace;background:rgba(2,8,16,.9);display:none;}
+#tapToType:active{border-color:var(--blue);color:var(--blue);}
 
 /* SPIN WHEEL */
 #wheelScreen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:50;background:rgba(2,8,16,.97);}
@@ -1553,22 +1553,43 @@ mobileEl.addEventListener('input', ()=>{
     }
   }
   lastMobileVal = val;
-  if(val.length > 20){ mobileEl.value=''; lastMobileVal=''; }
+  // Reset when too long
+  if(val.length > 30){ mobileEl.value=''; lastMobileVal=''; }
 });
 
 mobileEl.addEventListener('keydown', e=>{
   if(e.key==='Backspace'&&running) doBackspace();
+  if(e.key==='Enter') e.preventDefault();
+});
+
+// Keep focus on mobile input while game runs
+mobileEl.addEventListener('blur', ()=>{
+  if(running&&!paused) setTimeout(()=>{ try{ mobileEl.focus(); }catch(e){} }, 100);
 });
 
 function focusMobileInput(){
-  mobileEl.style.pointerEvents='all';
-  mobileEl.focus();
-  mobileEl.style.pointerEvents='none';
-  mobileEl.value=''; lastMobileVal='';
+  try{
+    mobileEl.style.pointerEvents='all';
+    mobileEl.removeAttribute('readonly');
+    mobileEl.value='';
+    lastMobileVal='';
+    mobileEl.focus();
+    mobileEl.click();
+    mobileEl.style.pointerEvents='none';
+  }catch(e){ console.log('focus err:',e); }
 }
 
+// Touch anywhere on canvas = focus input
+gameCanvas.addEventListener('touchstart', e=>{
+  if(running&&!paused){ e.preventDefault(); focusMobileInput(); }
+},{passive:false});
+
+starCanvas.addEventListener('touchstart', e=>{
+  if(running&&!paused){ e.preventDefault(); focusMobileInput(); }
+},{passive:false});
+
 function isTouchDevice(){
-  return window.matchMedia('(hover:none)and(pointer:coarse)').matches;
+  return ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
 }
 
 function doBackspace(){
@@ -1624,8 +1645,11 @@ function startGame(){
   running=true; paused=false;
   lastTime=performance.now();
   if(soundEnabled) setTimeout(()=>startBgMusic(), 500);
-  // Auto-open keyboard on touch devices
-  if(isTouchDevice()) setTimeout(()=>focusMobileInput(), 300);
+  // Mobile support
+  if(isTouchDevice()){
+    $('tapToType').style.display='block';
+    setTimeout(()=>focusMobileInput(), 400);
+  }
   requestAnimationFrame(loop);
 }
 
@@ -1641,6 +1665,7 @@ function quitToMenu(){
 function endGame(){
   running=false;
   stopBgMusic();
+  $('tapToType').style.display='none';
   ['hud','inputBar','agentPanel','comboWrap'].forEach(id=>$(id).classList.add('hidden'));
   $('fScore').textContent=score; $('fLevel').textContent=level; $('fWords').textContent=wordsTyped;
   $('fWpm').textContent=bestWpm||0;
