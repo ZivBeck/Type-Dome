@@ -136,6 +136,11 @@ canvas{position:fixed;top:0;left:0;display:block;}
 #topicSwitchBanner{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(0);z-index:15;font-family:'Orbitron',sans-serif;font-size:20px;font-weight:900;letter-spacing:5px;pointer-events:none;opacity:0;white-space:nowrap;transition:transform .25s cubic-bezier(.34,1.56,.64,1),opacity .3s;text-align:center;color:var(--yellow);text-shadow:0 0 20px rgba(255,221,0,.7);}
 #topicSwitchBanner.show{transform:translate(-50%,-50%) scale(1);opacity:1;}
 
+/* MOBILE */
+#mobileInput{position:fixed;opacity:0;pointer-events:none;width:1px;height:1px;top:50%;left:50%;border:none;outline:none;background:transparent;color:transparent;font-size:16px;z-index:-1;}
+#tapToType{position:fixed;bottom:90px;left:50%;transform:translateX(-50%);z-index:5;font-size:10px;letter-spacing:3px;color:var(--dim);pointer-events:all;cursor:pointer;padding:8px 20px;border:1px solid var(--dim);display:none;font-family:'Share Tech Mono',monospace;background:rgba(2,8,16,.8);}
+@media(hover:none)and(pointer:coarse){#tapToType{display:block;}}
+
 /* SPIN WHEEL */
 #wheelScreen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;z-index:50;background:rgba(2,8,16,.97);}
 #wheelScreen.hidden{display:none;}
@@ -184,6 +189,8 @@ canvas{position:fixed;top:0;left:0;display:block;}
 <div id="flash"></div>
 <div id="lvlBanner"></div>
 <div id="topicSwitchBanner"></div>
+<input id="mobileInput" type="text" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+<div id="tapToType" onclick="focusMobileInput()">⌨ TAP TO TYPE</div>
 
 <!-- ══ SPIN WHEEL ══ -->
 <div id="wheelScreen" class="hidden">
@@ -1518,17 +1525,60 @@ function updateComboUI(){
 }
 
 window.addEventListener('keydown',e=>{
-  // If user is typing in the API key input — let the browser handle everything
-  if(document.activeElement === $('apiKeyInput')) return;
-
+  if(document.activeElement===$('apiKeyInput')) return;
+  if(document.activeElement===$('geminiKeyInput')) return;
   if(e.key==='Escape'){
     if(running&&!paused){ paused=true; goTo('pauseScreen'); }
     else if(paused){ resumeGame(); }
     return;
   }
+  if(e.key==='Backspace'&&running){ doBackspace(); return; }
   if(['Enter','Tab',' '].includes(e.key)){ e.preventDefault(); return; }
   if(e.key.length===1&&/[a-zA-Z]/.test(e.key)){ e.preventDefault(); processKey(e.key.toLowerCase()); }
 });
+
+// ════════════════════════════════════════════════
+//  MOBILE INPUT
+// ════════════════════════════════════════════════
+const mobileEl = document.getElementById('mobileInput');
+let lastMobileVal = '';
+
+mobileEl.addEventListener('input', ()=>{
+  if(!running||paused) return;
+  const val = mobileEl.value;
+  if(val.length > lastMobileVal.length){
+    const newChars = val.slice(lastMobileVal.length);
+    for(const ch of newChars){
+      if(/[a-zA-Z]/.test(ch)) processKey(ch.toLowerCase());
+    }
+  }
+  lastMobileVal = val;
+  if(val.length > 20){ mobileEl.value=''; lastMobileVal=''; }
+});
+
+mobileEl.addEventListener('keydown', e=>{
+  if(e.key==='Backspace'&&running) doBackspace();
+});
+
+function focusMobileInput(){
+  mobileEl.style.pointerEvents='all';
+  mobileEl.focus();
+  mobileEl.style.pointerEvents='none';
+  mobileEl.value=''; lastMobileVal='';
+}
+
+function isTouchDevice(){
+  return window.matchMedia('(hover:none)and(pointer:coarse)').matches;
+}
+
+function doBackspace(){
+  if(currentInput.length>0){
+    currentInput=currentInput.slice(0,-1);
+    missiles.forEach(m=>{ if(m.active) m.typed=m.word.startsWith(currentInput)?currentInput.length:0; });
+    gifts.forEach(g=>{ if(g.active) g.typed=g.word.startsWith(currentInput)?currentInput.length:0; });
+    renderInput();
+  }
+}
 
 // ════════════════════════════════════════════════
 //  GAME FLOW
@@ -1574,6 +1624,8 @@ function startGame(){
   running=true; paused=false;
   lastTime=performance.now();
   if(soundEnabled) setTimeout(()=>startBgMusic(), 500);
+  // Auto-open keyboard on touch devices
+  if(isTouchDevice()) setTimeout(()=>focusMobileInput(), 300);
   requestAnimationFrame(loop);
 }
 
