@@ -669,7 +669,7 @@ async function callClaude(prompt, maxTokens=700){
 }
 
 async function callGemini(prompt, maxTokens=700){
-  const model = 'gemini-2.5-flash-preview-04-17';
+  const model = 'gemini-2.5-flash';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
   const res = await fetch(url,{
     method:'POST',
