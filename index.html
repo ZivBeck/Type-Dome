@@ -1648,7 +1648,6 @@ function startGame(){
   score=0; lives=5; level=1; combo=0; bestCombo=0;
   wordsTyped=0; totalKeys=0; correctKeys=0; bestWpm=0;
   currentInput=''; spawnTimer=2; wpmTimer=0; wpmCount=0; wpmStart=Date.now();
-  agentCooldown=0; // run agents immediately
 
   for(let i=1;i<=5;i++) $(`h${i}`).classList.remove('dead');
   $('scoreEl').textContent='0'; $('levelEl').textContent='1'; $('wpmEl').textContent='—';
@@ -1707,7 +1706,8 @@ function doLevelUp(){
   diffOverride=null;
   sfxLevelUp();
   doFlash('#ffdd00',.1); showLvlBanner(level);
-  agentCooldown=0;
+  // ברמה חדשה — טען מילים חדשות בלבד (לא כל הסוכנים)
+  contentCooldown=0;
 }
 
 function loseLife(){
