@@ -691,9 +691,12 @@ async function callGemini(prompt, maxTokens=700){
     });
     const data = await res.json();
     if(res.status===429){
-      // Rate limit — המתן 15 שניות ונסה שוב
-      if(attempt===0){ await new Promise(r=>setTimeout(r,15000)); continue; }
-      throw new Error('Rate limit — נסה שוב בעוד דקה');
+      if(attempt===0){
+        setAgent('content', false, 'RATE LIMIT — ממתין 30s...');
+        await new Promise(r=>setTimeout(r,30000));
+        continue;
+      }
+      throw new Error('Gemini quota exceeded — נסה Claude API במקום');
     }
     if(data.error) throw new Error(data.error.message);
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -1204,7 +1207,12 @@ let wordsTyped=0, totalKeys=0, correctKeys=0, bestWpm=0;
 let currentInput='';
 let running=false, paused=false;
 let lastTime=0, spawnTimer=2, wpmTimer=0, wpmCount=0, wpmStart=0;
-let giftTimer=15+Math.random()*10; // first gift after 15-25s
+let giftTimer=15+Math.random()*10;
+// סוכנים נפרדים — כל אחד עם טיימר משלו
+let contentCooldown=5;   // תוכן — מיד בהתחלה
+let diffCooldown=90;     // קושי — אחרי 90s
+let feedCooldown=120;    // פידבק — אחרי 120s
+let contentRunning=false, diffRunning=false, feedRunning=false;
 let errorMap=new Map();
 let agentCooldown=0;
 let agentsRunning=false;
@@ -1420,16 +1428,15 @@ let diffOverride=null;
 
 async function runAllAgents(){
   if(!running||paused) return;
-  agentCooldown=90; // כל 90 שניות — נמנע מחריגת מכסה
+  agentCooldown=120; // 2 דקות בין ריצות — מכסת Gemini: 15 בקשות לדקה
   const cfg=getCurrentCfg();
   const acc=totalKeys>0?Math.round(correctKeys/totalKeys*100):100;
   const wpm=calcWpm();
   await runContentAgent(selectedTopic.id, cfg.minW, cfg.maxW);
-  // מרווח קטן בין קריאות כדי לא לחרוג מ-rate limit
-  await new Promise(r=>setTimeout(r,3000));
-  runDifficultyAgent(wpm, acc, cfg.minW, cfg.maxW);
-  await new Promise(r=>setTimeout(r,3000));
-  runFeedbackAgent();
+  await new Promise(r=>setTimeout(r,8000)); // 8 שניות בין סוכנים
+  await runDifficultyAgent(wpm, acc, cfg.minW, cfg.maxW);
+  await new Promise(r=>setTimeout(r,8000));
+  await runFeedbackAgent();
 }
 
 // ════════════════════════════════════════════════
@@ -1627,6 +1634,9 @@ function startGame(){
   missiles=[]; gifts=[]; particles=[];
   mixedTimer=0; mixedTopicIdx=0;
   giftTimer=15+Math.random()*10;
+  // טיימרים נפרדים לכל סוכן
+  contentCooldown=5; diffCooldown=90; feedCooldown=120;
+  contentRunning=false; diffRunning=false; feedRunning=false;
   // Shuffle topics for mixed mode — always start with tech
   const rest=[...TOPICS].filter(t=>t.id!=='tech').sort(()=>Math.random()-.5);
   mixedTopics=['tech',...rest.map(t=>t.id)];
@@ -1925,12 +1935,13 @@ function loop(ts){
 
   if(paused){ ctx.clearRect(0,0,W,H); drawBase(); missiles.forEach(m=>m.draw(ctx)); return; }
 
-  spawnTimer+=dt; wpmTimer+=dt; agentCooldown-=dt; giftTimer-=dt;
+  spawnTimer+=dt; wpmTimer+=dt; giftTimer-=dt;
+  contentCooldown-=dt; diffCooldown-=dt; feedCooldown-=dt;
 
   // Gift spawn
   if(giftTimer<=0){
     spawnGift();
-    giftTimer=18+Math.random()*14; // next gift in 18-32s
+    giftTimer=18+Math.random()*14;
   }
 
   // Mixed mode: switch topic every 30 seconds
@@ -1943,7 +1954,7 @@ function loop(ts){
       selectedTopic=TOPICS.find(t=>t.id===nextId)||TOPICS[mixedTopicIdx%TOPICS.length];
       $('topicBadge').textContent=`🎲 ${selectedTopic.icon} ${selectedTopic.label.toUpperCase()} (30s)`;
       showTopicSwitch(selectedTopic);
-      agentCooldown=0;
+      contentCooldown=0; // טען מילים חדשות לנושא החדש
     }
   }
 
@@ -1954,17 +1965,27 @@ function loop(ts){
   if(wpmTimer>=3){
     wpmTimer=0;
     const w=calcWpm(); $('wpmEl').textContent=w||'—'; if(w>bestWpm)bestWpm=w;
-    // Show mixed countdown in topic badge
     if(isMixed){
       const remaining=Math.ceil(MIXED_INTERVAL-mixedTimer);
       $('topicBadge').textContent=`🎲 ${selectedTopic.icon} ${selectedTopic.label.toUpperCase()} (${remaining}s)`;
     }
   }
 
-  // Agent cycle — agentsRunning flag prevents concurrent calls
-  if(agentCooldown<=0 && !agentsRunning){
-    agentsRunning=true;
-    runAllAgents().finally(()=>{ agentsRunning=false; });
+  // כל סוכן רץ בנפרד — לא מעמיסים על ה-API בו זמנית
+  if(contentCooldown<=0 && !contentRunning){
+    contentCooldown=120; contentRunning=true;
+    const cfg2=getCurrentCfg();
+    runContentAgent(selectedTopic.id, cfg2.minW, cfg2.maxW).finally(()=>contentRunning=false);
+  }
+  if(diffCooldown<=0 && !diffRunning && totalKeys>10){
+    diffCooldown=130; diffRunning=true;
+    const cfg2=getCurrentCfg();
+    const acc=totalKeys>0?Math.round(correctKeys/totalKeys*100):100;
+    runDifficultyAgent(calcWpm(), acc, cfg2.minW, cfg2.maxW).finally(()=>diffRunning=false);
+  }
+  if(feedCooldown<=0 && !feedRunning && errorMap.size>0){
+    feedCooldown=140; feedRunning=true;
+    runFeedbackAgent().finally(()=>feedRunning=false);
   }
 
   ctx.clearRect(0,0,W,H);
