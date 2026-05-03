@@ -6,12 +6,12 @@
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap');
 :root{
-  --bg:#020810;--blue:#00d4ff;--green:#00ff88;
-  --red:#ff2244;--orange:#ff8800;--yellow:#ffdd00;
-  --text:#a0c4d8;--dim:#2a3f55;
+  --bg:#f8f9fa;--blue:#0057b8;--green:#0057b8;
+  --red:#e06c00;--orange:#e06c00;--yellow:#8b6914;
+  --text:#1a1a2e;--dim:#6c757d;
 }
 *{margin:0;padding:0;box-sizing:border-box;}
-html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Share Tech Mono',monospace;}
+html,body{width:100%;height:100%;overflow:hidden;background:#ffffff;color:var(--text);font-family:'Share Tech Mono',monospace;}
 canvas,button,.screen:not(#menuScreen) *:not(input){user-select:none;}
 canvas{position:fixed;top:0;left:0;display:block;}
 #starCanvas{z-index:0;}
@@ -477,7 +477,7 @@ class Missile {
     this.trail = []; this.trailTimer = 0;
 
     const l = word.length;
-    this.col = l<=4 ? '#00d4ff' : l<=7 ? '#ff8800' : '#ff2244';
+    this.col = l<=4 ? '#0077cc' : l<=7 ? '#e06c00' : '#7b2d8b';
 
     // Side missiles start from level 1 with low chance, scale fast
     // Level 1: 15%, Level 2: 35%, Level 3: 55%, Level 4+: 75%
@@ -578,19 +578,19 @@ class Missile {
 
     // Word label — always horizontal
     ctx.save();
-    ctx.font = "bold 13px 'Share Tech Mono',monospace";
+    ctx.font = "bold 32px 'Share Tech Mono',monospace";
     const done = this.word.slice(0, this.typed), rest = this.word.slice(this.typed);
     const dw = ctx.measureText(done).width, rw = ctx.measureText(rest).width;
     const lx = x - (dw + rw) / 2;
     const labelY = y - 50;
     ctx.fillStyle = 'rgba(2,8,16,.9)';
-    ctx.fillRect(lx-8, labelY-2, dw+rw+16, 22);
+    ctx.fillRect(lx-14, labelY-6, dw+rw+28, 42);
     ctx.strokeStyle = this.col + '55'; ctx.lineWidth = 1;
-    ctx.strokeRect(lx-8, labelY-2, dw+rw+16, 22);
+    ctx.strokeRect(lx-14, labelY-6, dw+rw+28, 42);
     ctx.textAlign = 'left';
-    if(done){ ctx.fillStyle='#00ff88'; ctx.shadowBlur=8; ctx.shadowColor='#00ff88'; ctx.fillText(done,lx,labelY+14); }
+    if(done){ ctx.fillStyle='#0044aa'; ctx.shadowBlur=6; ctx.shadowColor='#0044aa'; ctx.fillText(done,lx,labelY+26); }
     ctx.fillStyle = this.col; ctx.shadowBlur = 5; ctx.shadowColor = this.col;
-    ctx.fillText(rest, lx+dw, labelY+14);
+    ctx.fillText(rest, lx+dw, labelY+26);
     ctx.restore();
   }
 }
@@ -678,17 +678,26 @@ async function callClaude(prompt, maxTokens=700){
 async function callGemini(prompt, maxTokens=700){
   const model = 'gemini-2.5-flash-lite';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`;
-  const res = await fetch(url,{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body: JSON.stringify({
-      contents:[{parts:[{text:prompt}]}],
-      generationConfig:{maxOutputTokens:maxTokens, temperature:0.7}
-    })
-  });
-  const data = await res.json();
-  if(data.error) throw new Error(data.error.message);
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  
+  // נסה עד 2 פעמים אם 429
+  for(let attempt=0; attempt<2; attempt++){
+    const res = await fetch(url,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        contents:[{parts:[{text:prompt}]}],
+        generationConfig:{maxOutputTokens:maxTokens, temperature:0.7}
+      })
+    });
+    const data = await res.json();
+    if(res.status===429){
+      // Rate limit — המתן 15 שניות ונסה שוב
+      if(attempt===0){ await new Promise(r=>setTimeout(r,15000)); continue; }
+      throw new Error('Rate limit — נסה שוב בעוד דקה');
+    }
+    if(data.error) throw new Error(data.error.message);
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  }
 }
 
 async function callAI(prompt, maxTokens=700){
@@ -1165,11 +1174,11 @@ function initStars(){
   }));
 }
 function drawStars(){
-  sctx.clearRect(0,0,starCanvas.width,starCanvas.height);
+  sctx.fillStyle='#ffffff';
+  sctx.fillRect(0,0,starCanvas.width,starCanvas.height);
   for(const s of stars){
     s.a+=s.da; if(s.a>1||s.a<0)s.da*=-1;
-    sctx.save(); sctx.globalAlpha=s.a*.7+.1; sctx.fillStyle='#a0c4d8';
-    sctx.shadowBlur=4; sctx.shadowColor='#00d4ff44';
+    sctx.save(); sctx.globalAlpha=s.a*.3+.05; sctx.fillStyle='#aabbcc';
     sctx.beginPath(); sctx.arc(s.x,s.y,s.r,0,Math.PI*2); sctx.fill(); sctx.restore();
   }
 }
@@ -1202,11 +1211,11 @@ let agentsRunning=false;
 
 function levelCfg(lvl){
   return{
-    speed:    Math.min(200, 90+lvl*18),     // starts at 90 (was 44), max 200
-    interval: Math.max(0.7, 2.8-lvl*0.28), // starts at 2.8s (was 3.5s), min 0.7s
-    maxMissiles: Math.min(2+lvl, 10),        // starts at 3 (was 3)
-    minW: Math.max(4, lvl+2),               // starts at 4 chars (was 3)
-    maxW: Math.min(12, lvl+7)               // starts at 8 chars (was lvl+5)
+    speed:    Math.min(160, 75+lvl*10),     // התחלה 85px/s
+    interval: Math.max(1.8, 7.0-lvl*0.3),
+    maxMissiles: Math.min(1+lvl, 7),
+    minW: Math.max(3, lvl),
+    maxW: Math.min(10, lvl+4)
   };
 }
 
@@ -1411,16 +1420,15 @@ let diffOverride=null;
 
 async function runAllAgents(){
   if(!running||paused) return;
-  agentCooldown=35;
+  agentCooldown=90; // כל 90 שניות — נמנע מחריגת מכסה
   const cfg=getCurrentCfg();
   const acc=totalKeys>0?Math.round(correctKeys/totalKeys*100):100;
   const wpm=calcWpm();
-
-  // Run content agent first (can take a few seconds)
   await runContentAgent(selectedTopic.id, cfg.minW, cfg.maxW);
-
-  // Run diff + feedback in parallel — don't wait for each other
+  // מרווח קטן בין קריאות כדי לא לחרוג מ-rate limit
+  await new Promise(r=>setTimeout(r,3000));
   runDifficultyAgent(wpm, acc, cfg.minW, cfg.maxW);
+  await new Promise(r=>setTimeout(r,3000));
   runFeedbackAgent();
 }
 
@@ -1855,16 +1863,16 @@ class Gift {
 
     // Word label below box
     ctx.save();
-    ctx.font="bold 13px 'Share Tech Mono',monospace";
+    ctx.font="bold 32px 'Share Tech Mono',monospace";
     const done=this.word.slice(0,this.typed), rest=this.word.slice(this.typed);
     const dw=ctx.measureText(done).width, rw=ctx.measureText(rest).width;
     const lx=x-(dw+rw)/2, ly=y+38;
-    ctx.fillStyle='rgba(2,8,16,.9)';
-    ctx.fillRect(lx-8,ly-2,dw+rw+16,22);
+    ctx.fillStyle='rgba(255,255,255,.92)';
+    ctx.fillRect(lx-14,ly-6,dw+rw+28,42);
     ctx.strokeStyle=this.type.color+'88'; ctx.lineWidth=1;
-    ctx.strokeRect(lx-8,ly-2,dw+rw+16,22);
+    ctx.strokeRect(lx-14,ly-6,dw+rw+28,42);
     ctx.textAlign='left';
-    if(done){ ctx.fillStyle='#00ff88'; ctx.shadowBlur=8; ctx.shadowColor='#00ff88'; ctx.fillText(done,lx,ly+14); }
+    if(done){ ctx.fillStyle='#0044aa'; ctx.shadowBlur=6; ctx.shadowColor='#0044aa'; ctx.fillText(done,lx,ly+14); }
     ctx.fillStyle=this.type.color; ctx.shadowBlur=5; ctx.shadowColor=this.type.color;
     ctx.fillText(rest,lx+dw,ly+14);
     ctx.restore();
